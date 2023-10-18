@@ -12,7 +12,7 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
 # First, find the results file.
-experiment_list = [s for s in os.listdir() if not s.endswith('.txt') and not s.endswith('.py')]
+experiment_list = [s for s in os.listdir() if not s.endswith('.txt') and not s.endswith('.py') and s != '__pycache__']
 home_dir = os.getcwd()
 table_filename = 'table.txt'
 
@@ -21,14 +21,13 @@ header_written = False
 outfile = open(table_filename, 'w')
 for experiment in experiment_list:
     os.chdir(home_dir+'/'+experiment)
-    out_files = [s for s in os.listdir() if s.endswith('.out')]
-    for file in out_files:
-        for line in open(file, 'r'):
-            if '\t' in line and line.startswith('is_coea_point') and not header_written:
-                outfile.write(line[:-1]+'\texperiment\n')
-                header_written = True
-            if '\t' in line and not line.startswith('is_coea_point'):
-                outfile.write(line[:-1]+'\t'+experiment+'\n')
+    file = [s for s in os.listdir() if s.endswith('.out')][0]
+    for line in open(file, 'r'):
+        if '\t' in line and line.startswith('is_coea_point') and not header_written:
+            outfile.write(line[:-1]+'\texperiment\n')
+            header_written = True
+        if '\t' in line and not line.startswith('is_coea_point'):
+            outfile.write(line[:-1]+'\t'+experiment+'\n')
 outfile.close()
 os.chdir(home_dir)
 
