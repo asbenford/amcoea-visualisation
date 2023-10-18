@@ -12,20 +12,24 @@ def hex_to_rgb(hex_color: str) -> tuple:
     return int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
 
 # First, find the results file.
-results_files = [s for s in os.listdir() if s.endswith('.out')]
+experiment_list = [s for s in os.listdir() if not s.endswith('.txt') and not s.endswith('.py')]
+home_dir = os.getcwd()
 table_filename = 'table.txt'
 
 # First filter out repeated rows and any rows without a tab, and also any rows that start with a tab.
 header_written = False
 outfile = open(table_filename, 'w')
-for file in results_files:
+for experiment in experiment_list:
+    os.chdir(home_dir+'/'+experiment)
+    file = [s for s in os.listdir() if s.endswith('.out')][0]
     for line in open(file, 'r'):
         if '\t' in line and line.startswith('is_coea_point') and not header_written:
             outfile.write(line[:-1]+'\texperiment\n')
             header_written = True
         if '\t' in line and not line.startswith('is_coea_point'):
-            outfile.write(line[:-1]+'\t'+file+'\n')
+            outfile.write(line[:-1]+'\t'+experiment+'\n')
 outfile.close()
+os.chdir(home_dir)
 
 df = pd.read_table(table_filename,delimiter="\t")
 t_list = [t for t,_ in df.groupby('fevals')]
@@ -47,7 +51,7 @@ app.layout = dbc.Container(fluid=True,children=[
             dbc.Row(children=[
                 dbc.Col([html.Div("Select experiment:")],width='auto') ,
                 dbc.Col([
-                    dcc.Dropdown(options=results_files,value=results_files[0],id='dropdown')
+                    dcc.Dropdown(options=experiment_list,value=experiment_list[0],id='dropdown')
                 ],width=3)
             ]) ,
             dbc.Row(children=[
@@ -56,7 +60,20 @@ app.layout = dbc.Container(fluid=True,children=[
                     dcc.Slider(step=None,marks=dict([(i,str(t)) for i,t in enumerate(t_list)]),value=(len(t_list)-1),id='slider')
                 ])
             ]) ,
-            dbc.Row(children=[dcc.Graph(figure={},style={'width': '70vh', 'height': '70vh'},id='pf-chart')])
+            dbc.Row(children=[dcc.Graph(figure={},style={'width': '70vh', 'height': '70vh'},id='pf-chart')]) ,
+            html.Hr() ,
+            html.H3("File viewer") ,
+            dbc.Row(children=[
+                dbc.Col([html.Div("Select file:")],width='auto') ,
+                dbc.Col([
+                    dcc.Dropdown(options=["file1","file2"],value="file1",id='file-viewer-select')
+                ],width=3)
+            ]) ,
+            html.Div(
+                id='file-viewer-display' ,
+                style={'whiteSpace': 'pre-line','font-family':'monospace','background-color':'lightblue','maxHeight':'1000px','overflow':'scroll'} ,
+                children=''
+            )
         ],width=6) ,
         dbc.Col([
             html.H3("Controller Parameters") ,
@@ -75,18 +92,23 @@ app.layout = dbc.Container(fluid=True,children=[
                 dbc.Col([dcc.Graph(figure={},id='prey-param-chart')])
             ]) ,
         ],width=6)
-    ],align='center')
+    ],align='start')
 ])
 
 @callback(
     Output(component_id='slider',component_property='marks'),
     Output(component_id='slider',component_property='value'),
+    Output(component_id='file-viewer-select',component_property='options') ,
+    Output(component_id='file-viewer-select',component_property='value') ,
     Input(component_id='dropdown',component_property='value')
 )
-def update_slider(experiment):
-    df_exp = df[df.apply(lambda x: x['experiment']==experiment,axis=1)]
+def experiment_select(experiment):
+    df_exp = df[df.apply(lambda x: str(x['experiment'])==experiment,axis=1)]
     t_list = [t for t,_ in df_exp.groupby('fevals')]
-    return dict([(i,str(t)) for i,t in enumerate(t_list)]), (len(t_list)-1)
+    os.chdir(home_dir+'/'+experiment)
+    available_files = os.listdir()
+    os.chdir(home_dir)
+    return dict([(i,str(t)) for i,t in enumerate(t_list)]), (len(t_list)-1) , available_files , available_files[0]
 
 
 @callback(
@@ -102,7 +124,7 @@ def update_pf_chart(experiment,i):
     # Plot the pareto front.
     pf_color = colors[0]
     df_pf = df[df.apply(lambda x:
-        x['experiment']==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
+        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
         axis=1)]
     pf = [ ( row['f1'] , row['f2'] ) for _,row in df_pf.iterrows()]
     x = [ p[0] for p in pf ]
@@ -126,7 +148,7 @@ def update_pf_chart(experiment,i):
     # Plot the coea performance.
     coea_color = colors[1]
     coea_row = df[df.apply(lambda x:
-        x['experiment']==experiment and x['is_ea_point']==False and x['is_coea_point']==True and x['fevals']==t,
+        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==True and x['fevals']==t,
         axis=1)].iloc[0]
     fig.add_trace(go.Scatter(
         x=[coea_row['f1']],y=[coea_row['f2']],
@@ -140,7 +162,7 @@ def update_pf_chart(experiment,i):
     # Plot the ea performance.
     ea_color = colors[2]
     ea_row = df[df.apply(lambda x:
-        x['experiment']==experiment and x['is_ea_point']==True and x['is_coea_point']==False and x['fevals']==t,
+        str(x['experiment'])==experiment and x['is_ea_point']==True and x['is_coea_point']==False and x['fevals']==t,
         axis=1)].iloc[0]
     fig.add_trace(go.Scatter(
         x=[ea_row['f1']],y=[ea_row['f2']],
@@ -184,7 +206,7 @@ def update_param_chart(experiment,i,params,column_string):
     t = t_list[i]
     colors = fig.layout['template']['layout']['colorway']
     df_pf = df[df.apply(lambda x:
-        x['experiment']==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
+        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
         axis=1)]
     def get_individual (row):
         s = row[column_string]
@@ -216,6 +238,17 @@ def update_pred_param_chart(experiment,i,params):
 )
 def update_pred_param_chart(experiment,i,params):
     return update_param_chart(experiment,i,params,'prey')
+
+@callback(
+    Output(component_id='file-viewer-display',component_property='children') ,
+    Input(component_id='dropdown',component_property='value') ,
+    Input(component_id='file-viewer-select',component_property='value')
+)
+def view_file(experiment,filename):
+    os.chdir(home_dir+'/'+experiment)
+    with open(filename) as f:
+        text_to_display = f.read()
+    return text_to_display
 
 
 
