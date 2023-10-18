@@ -21,13 +21,14 @@ header_written = False
 outfile = open(table_filename, 'w')
 for experiment in experiment_list:
     os.chdir(home_dir+'/'+experiment)
-    file = [s for s in os.listdir() if s.endswith('.out')][0]
-    for line in open(file, 'r'):
-        if '\t' in line and line.startswith('is_coea_point') and not header_written:
-            outfile.write(line[:-1]+'\texperiment\n')
-            header_written = True
-        if '\t' in line and not line.startswith('is_coea_point'):
-            outfile.write(line[:-1]+'\t'+experiment+'\n')
+    out_files = [s for s in os.listdir() if s.endswith('.out')]
+    for file in out_files:
+        for line in open(file, 'r'):
+            if '\t' in line and line.startswith('is_coea_point') and not header_written:
+                outfile.write(line[:-1]+'\texperiment\n')
+                header_written = True
+            if '\t' in line and not line.startswith('is_coea_point'):
+                outfile.write(line[:-1]+'\t'+experiment+'\n')
 outfile.close()
 os.chdir(home_dir)
 
