@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.graph_objects as go
 import os
-from dash import Dash, html, dcc , callback , Output, Input
+from dash import Dash, html, dcc , callback , Output, Input , State , ALL , MATCH , Patch
 import dash_bootstrap_components as dbc
 
 # Some color stuff.
@@ -16,232 +16,304 @@ experiment_list = [s for s in os.listdir() if not s.endswith('.txt') and not s.e
 home_dir = os.getcwd()
 table_filename = 'table.txt'
 
+def is_header(str) : return str.startswith('group')
+
+df_dict = {}
 # First filter out repeated rows and any rows without a tab, and also any rows that start with a tab.
-header_written = False
-outfile = open(table_filename, 'w')
 for experiment in experiment_list:
+    header_written = False
     os.chdir(home_dir+'/'+experiment)
+    outfile = open(table_filename, 'w')
     file = [s for s in os.listdir() if s.endswith('.out')][0]
     for line in open(file, 'r'):
-        if '\t' in line and line.startswith('is_coea_point') and not header_written:
+        if '\t' in line and is_header(line) and not header_written:
             outfile.write(line[:-1]+'\texperiment\n')
             header_written = True
-        if '\t' in line and not line.startswith('is_coea_point'):
+        if '\t' in line and not is_header(line):
             outfile.write(line[:-1]+'\t'+experiment+'\n')
-outfile.close()
+    df_dict[experiment] = pd.read_table(table_filename,delimiter="\t")
+    outfile.close()
 os.chdir(home_dir)
 
-df = pd.read_table(table_filename,delimiter="\t")
-t_list = [t for t,_ in df.groupby('fevals')]
-num_pred_parameters = df.iloc[0]['pred'].count(';')+1
-num_prey_parameters = df.iloc[0]['prey'].count(';')+1
+def t_list(dataframe) : return [t for t,_ in dataframe.groupby('f_evals')]
 
 # App initialisation.
 external_stylesheets = [dbc.themes.BOOTSTRAP]
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
+
+
 # App layout.
+
+def comparison_selector(i) :
+    plot_types = ['pareto','average','worst-case','none']
+    checkbox_label = 'plot sub-payoffs'
+    if i == 0:
+        default_checkbox_value = [checkbox_label]
+    else:
+        default_checkbox_value = []
+    return dbc.Row(children=[
+        dbc.Col([html.Div("Select comparison:")],width='auto') ,
+        dbc.Col([
+            dcc.Dropdown(options=[''],value='',id={'type':'group-dropdown','index':i})
+        ],width=3) ,
+        dbc.Col([ dcc.RadioItems(plot_types,plot_types[i%len(plot_types)],inline=True, id={'type':'plot-type-radio','index':i}) ]) ,
+        dbc.Col([ dcc.Checklist(options=[checkbox_label],value=default_checkbox_value,id={'type':'subpayoff-checkbox','index':i})])
+    ])
+
+def parameter_chart(id,section_title,prefix,experiment):
+    df = df_dict[experiment]
+    col_names = [s for s in list(df.columns.values) if s.startswith(prefix)]
+    group_list = [s for s,_ in df.groupby('group')]
+    return dbc.Row(children=[dbc.Col([
+        html.H3(section_title) ,
+        dcc.Dropdown(options=group_list,value=group_list[0],id={'type':'param-dropdown','id':id}) ,
+        dbc.Row(children=[
+            dbc.Col(width=2,children=[
+                dcc.Checklist(
+                    options=[{'value':s,'label':s.removeprefix(prefix)} for s in col_names],value=[],
+                    id={'type':'param-checklist','id':id})
+            ]) ,
+            dbc.Col([dcc.Graph(figure={},id={'type':'param-chart','id':id})])
+        ]) 
+    ])])
+
 app.layout = dbc.Container(fluid=True,children=[
-    html.H1("AMCoEA Experiment Results"),
-    html.Hr(),
+    html.H1("AMCoEA Experiment Results") ,
+    html.Hr() ,
     dbc.Row(children=[
         dbc.Col([
             html.H3("Pareto front") ,
             dbc.Row(children=[
                 dbc.Col([html.Div("Select experiment:")],width='auto') ,
                 dbc.Col([
-                    dcc.Dropdown(options=experiment_list,value=experiment_list[0],id='dropdown')
+                    dcc.Dropdown(options=experiment_list,value=experiment_list[0],id='experiment-dropdown')
                 ],width=3)
             ]) ,
             dbc.Row(children=[
                 dbc.Col([html.Div("Select fevals:")],width='auto') ,
                 dbc.Col([
-                    dcc.Slider(step=None,marks=dict([(i,str(t)) for i,t in enumerate(t_list)]),value=(len(t_list)-1),id='slider')
+                    dcc.Slider(step=None,marks=dict([(0,"0")]),value=0,id='slider')
                 ])
             ]) ,
+            dbc.Row(children=[
+                dbc.Col([html.Button("Add comparison", id='add-comparison-btn',n_clicks=0)],width=2) ,
+                dbc.Col([html.Button("Remove comparison", id='remove-comparison-btn',n_clicks=0)],width=2)
+            ],justify='start'),
+            html.Div(children=[comparison_selector(i) for i in range(3)],id='comparison-selector-container') ,
             dbc.Row(children=[dcc.Graph(figure={},style={'width': '70vh', 'height': '70vh'},id='pf-chart')]) ,
+            dbc.Row(children=[dcc.Graph(figure={},style={'width': '70vh', 'height': '30vh'},id='subpayoff-chart')]) ,
             html.Hr() ,
             html.H3("File viewer") ,
             dbc.Row(children=[
                 dbc.Col([html.Div("Select file:")],width='auto') ,
                 dbc.Col([
-                    dcc.Dropdown(options=["file1","file2"],value="file1",id='file-viewer-select')
+                    dcc.Dropdown(options=[''],value='',id='file-viewer-select')
                 ],width=3)
             ]) ,
             html.Div(
                 id='file-viewer-display' ,
-                style={'whiteSpace': 'pre-line','font-family':'monospace','background-color':'lightblue','maxHeight':'1000px','overflow':'scroll'} ,
+                style={'whiteSpace': 'pre-line','font-family':'monospace','background-color':'lightblue','maxHeight':'1000px','overflow':'scroll','white-space':'pre'} ,
                 children=''
             )
         ],width=6) ,
-        dbc.Col([
-            html.H3("Controller Parameters") ,
-            dbc.Row(children=[
-                dbc.Col(width=2,children=[
-                    dcc.Checklist(options=list(range(num_pred_parameters)),value=[],id='pred-param-checklist')
-                ]) ,
-                dbc.Col([dcc.Graph(figure={},id='pred-param-chart')])
-            ]) ,
-            html.Hr(),
-            html.H3("Scenario Parameters") ,
-            dbc.Row(children=[
-                dbc.Col(width=2,children=[
-                    dcc.Checklist(options=list(range(num_prey_parameters)),value=[],id='prey-param-checklist')
-                ]) ,
-                dbc.Col([dcc.Graph(figure={},id='prey-param-chart')])
-            ]) ,
-        ],width=6)
+        dbc.Col([],width=6,id='param-column')
     ],align='start')
 ])
 
+
+# Dynamically add or remove comparisons.
+@callback(
+    Output(component_id='comparison-selector-container',component_property='children') ,
+    Input(component_id='add-comparison-btn',component_property='n_clicks') ,
+    Input(component_id='remove-comparison-btn',component_property='n_clicks')
+)
+def modify_comparison_selector_container(adds,removes):
+    target = 3 + adds - removes
+    return [comparison_selector(i) for i in range(target)]
+
+
+# Experiment selection
 @callback(
     Output(component_id='slider',component_property='marks'),
     Output(component_id='slider',component_property='value'),
     Output(component_id='file-viewer-select',component_property='options') ,
     Output(component_id='file-viewer-select',component_property='value') ,
-    Input(component_id='dropdown',component_property='value')
+    Output(component_id={'type':'group-dropdown','index':ALL},component_property='options') ,
+    Output(component_id={'type':'group-dropdown','index':ALL},component_property='value') ,
+    Output(component_id='param-column',component_property='children') ,
+    Input(component_id='experiment-dropdown',component_property='value') ,
+    State(component_id='comparison-selector-container',component_property='children')
 )
-def experiment_select(experiment):
-    df_exp = df[df.apply(lambda x: str(x['experiment'])==experiment,axis=1)]
-    t_list = [t for t,_ in df_exp.groupby('fevals')]
+def experiment_select(experiment,selector_holder):
+    num_selectors = len(selector_holder)
+    group_list = [s for s,_ in df_dict[experiment].groupby('group')]
     os.chdir(home_dir+'/'+experiment)
     available_files = os.listdir()
     os.chdir(home_dir)
-    return dict([(i,str(t)) for i,t in enumerate(t_list)]), (len(t_list)-1) , available_files , available_files[0]
+    return (
+        dict([(i,str(t)) for i,t in enumerate(t_list(df_dict[experiment]))]) ,
+        (len(t_list(df_dict[experiment]))-1) ,
+        available_files ,
+        available_files[0] ,
+        [group_list for _ in range(num_selectors)] ,
+        [group_list[0] for _ in range(num_selectors)] ,
+        [
+            parameter_chart('pred','Controller parameters','pred_param:',experiment) ,
+            html.Hr() ,
+            parameter_chart('prey','Scenario parameters','prey_param:',experiment)
+        ] )
 
 
+# Generating the pareto front chart.
 @callback(
     Output(component_id='pf-chart',component_property='figure'),
-    Input(component_id='dropdown',component_property='value'),
+    Output(component_id='subpayoff-chart',component_property='figure'),
+    Input(component_id='experiment-dropdown',component_property='value'),
+    Input(component_id={'type':'group-dropdown','index':ALL},component_property='value') ,
+    Input(component_id={'type':'plot-type-radio','index':ALL},component_property='value') ,
+    Input(component_id={'type':'subpayoff-checkbox','index':ALL},component_property='value'),
     Input(component_id='slider', component_property='value')
 )
-def update_pf_chart(experiment,i):
-    fig = go.Figure()
-    t = t_list[i]
-    colors = fig.layout['template']['layout']['colorway']
+def update_charts(experiment,groups,plot_types,plot_subpayoffs,i):
+    pf_fig = go.Figure()
+    sp_fig = go.Figure()
+    df_exp = df_dict[experiment]
+    t = t_list(df_exp)[i]
+    colors = pf_fig.layout['template']['layout']['colorway']
 
-    # Plot the pareto front.
-    pf_color = colors[0]
-    df_pf = df[df.apply(lambda x:
-        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
-        axis=1)]
-    pf = [ ( row['f1'] , row['f2'] ) for _,row in df_pf.iterrows()]
-    x = [ p[0] for p in pf ]
-    y = [ p[1] for p in pf ]
-    x_line , y_line = [0] , []
-    for p in pf:
-        x_line += [p[0],p[0]]
-        y_line += [p[1],p[1]]
-    y_line += [0]
-    fig.add_trace(go.Scatter(
-        x=x_line,y=y_line,
-        marker_color=pf_color,
-        fill='tozeroy',fillcolor=f"rgba{(*hex_to_rgb(pf_color), 0.1)}",hoverinfo='none',mode='lines',
-        name='AMCoEA pareto front'))
-    fig.add_trace(go.Scatter(
-        x=x,y=y,
-        marker_color=pf_color,
-        mode='markers',
-        showlegend=False))
-    
-    # Plot the coea performance.
-    coea_color = colors[1]
-    coea_row = df[df.apply(lambda x:
-        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==True and x['fevals']==t,
-        axis=1)].iloc[0]
-    fig.add_trace(go.Scatter(
-        x=[coea_row['f1']],y=[coea_row['f2']],
-        marker_color=coea_color,mode='markers',showlegend=False))
-    fig.add_trace(go.Scatter(
-        x=[coea_row['f1'],coea_row['f1']],y=[0,1], # Replace with upper and lower bounds. Do for other such traces too.
-        hoverinfo='none',line=dict(color=f"rgba{(*hex_to_rgb(coea_color), 0.5)}",dash='dash'),
-        name='(mu+lambda) CoEA performance (optimising worst-case payoff only)'
-    ))
+    for j,group in enumerate(groups):
 
-    # Plot the ea performance.
-    ea_color = colors[2]
-    ea_row = df[df.apply(lambda x:
-        str(x['experiment'])==experiment and x['is_ea_point']==True and x['is_coea_point']==False and x['fevals']==t,
-        axis=1)].iloc[0]
-    fig.add_trace(go.Scatter(
-        x=[ea_row['f1']],y=[ea_row['f2']],
-        marker_color=ea_color,mode='markers',showlegend=False))
-    fig.add_trace(go.Scatter(
-        x=[0,1],y=[ea_row['f2'],ea_row['f2']], # Replace with upper and lower bounds. Do for other such traces too.
-        hoverinfo='none',line=dict(color=f"rgba{(*hex_to_rgb(ea_color), 0.5)}",dash='dash'),
-        name='(mu+lambda) EA performance (optimising average payoff only)'
-    ))
+        # Obtain the pareto front.
+        df_pf = df_exp[df_exp.apply(lambda x:
+            x['group']==group and x['f_evals']==t,
+            axis=1)]
+        pf = [ ( row['f1'] , row['f2'] ) for _,row in df_pf.iterrows()]
+
+        if plot_types[j] == 'pareto':
+        # Plot the pareto front.
+            x = [ p[0] for p in pf ]
+            y = [ p[1] for p in pf ]
+            x_line , y_line = [0] , []
+            for p in pf:
+                x_line += [p[0],p[0]]
+                y_line += [p[1],p[1]]
+            y_line += [0]
+            pf_fig.add_trace(go.Scatter(
+                x=x_line,y=y_line,
+                marker_color=colors[j],
+                fill='tozeroy',fillcolor=f"rgba{(*hex_to_rgb(colors[j]), 0.1)}",hoverinfo='none',mode='lines',
+                name=group))
+            pf_fig.add_trace(go.Scatter(
+                x=x,y=y,
+                marker_color=colors[j],
+                mode='markers',
+                showlegend=False))
+            
+        if plot_types[j] == 'average':
+        # Plot the ea performance.
+            pf_fig.add_trace(go.Scatter(
+                x=[pf[0][0]],y=[pf[0][1]],
+                marker_color=colors[j],mode='markers',showlegend=False))
+            pf_fig.add_trace(go.Scatter(
+                x=[0,1],y=[pf[0][1],pf[0][1]], # Replace with upper and lower bounds. Do for other such traces too.
+                hoverinfo='none',line=dict(color=f"rgba{(*hex_to_rgb(colors[j]), 0.5)}",dash='dash'),
+                name=group
+            ))
+        
+        if plot_types[j] == 'worst-case':
+        # Plot the coea performance.
+            pf_fig.add_trace(go.Scatter(
+                x=[pf[-1][0]],y=[pf[-1][1]],
+                marker_color=colors[j],mode='markers',showlegend=False))
+            pf_fig.add_trace(go.Scatter(
+                x=[pf[-1][0],pf[-1][0]],y=[0,1], # Replace with upper and lower bounds. Do for other such traces too.
+                hoverinfo='none',line=dict(color=f"rgba{(*hex_to_rgb(colors[j]), 0.5)}",dash='dash'),
+                name=group
+            ))
+        
+        if len(plot_subpayoffs[j]) > 0 :
+        # Also plot monetary cost and customer satisfaction.
+            sp_fig.add_trace(go.Scatter(
+                x = [row['f1'] for _,row in df_pf.iterrows()] ,
+                y = [row['desirability:monetary_cost_per_kwh'] for _,row in df_pf.iterrows()] ,
+                mode='lines+markers',name='monetary_cost_per_kwh: '+group,
+                line=dict(color=colors[j],dash='dash')
+            ))
+            sp_fig.add_trace(go.Scatter(
+                x = [row['f1'] for _,row in df_pf.iterrows()] ,
+                y = [row['desirability:customer_satisfaction'] for _,row in df_pf.iterrows()] ,
+                mode='lines+markers',name='customer_satisfaction: '+group,
+                line=dict(color=colors[j],dash='dot')
+            ))
 
     # Add the line x=y to chart.
-    fig.add_trace(go.Scatter(x=[0,1],y=[0,1],hoverinfo='none',line=dict(color='black',dash='dash'),showlegend=False))
+    pf_fig.add_trace(go.Scatter(x=[0,1],y=[0,1],hoverinfo='none',line=dict(color='black',dash='dash'),showlegend=False))
     
     # Set scale
     buff = 0.1
-    x_min , x_max = min(df['f1']) , max(df['f1'])
-    y_min , y_max = min(df['f2']) , max(df['f2'])
+    x_min , x_max = min(df_exp['f1']) , max(df_exp['f1'])
+    y_min , y_max = min(df_exp['f2']) , max(df_exp['f2'])
     x_mid = ( x_min + x_max ) / 2
     y_mid = ( y_min + y_max ) / 2
     width = (1+buff) * max( x_max - x_min , y_max - y_min )
 
     # Sizing
-    fig.update_layout(xaxis_range=[ x_mid - width / 2 , x_mid + width / 2 ])
-    fig.update_layout(yaxis_range=[ y_mid - width / 2 , y_mid + width / 2 ])
+    pf_fig.update_layout(xaxis_range=[ x_mid - width / 2 , x_mid + width / 2 ])
+    sp_fig.update_layout(xaxis_range=[ x_mid - width / 2 , x_mid + width / 2 ])
+    pf_fig.update_layout(yaxis_range=[ y_mid - width / 2 , y_mid + width / 2 ])
 
     # Labels and legend
-    fig.update_layout(
+    pf_fig.update_layout(
         xaxis_title="worst-case controller payoff" ,
         yaxis_title="average controller payoff",
         showlegend=True,
         legend=dict(
             xanchor='left',yanchor='top',
             x=0,y=1
-        )
-    )
+        ))
     
-    return fig
+    sp_fig.update_layout(
+        xaxis_title="worst-case controller payoff",
+        showlegend=True,
+        legend=dict(
+            xanchor='left',yanchor='bottom',
+            x=0,y=1
+        ))
 
-def update_param_chart(experiment,i,params,column_string):
+
+    
+    return pf_fig , sp_fig
+
+# Generating the parameter charts.
+@callback(
+    Output(component_id={'type':'param-chart','id':MATCH},component_property='figure'),
+    Input(component_id='experiment-dropdown',component_property='value'),
+    Input(component_id={'type':'param-dropdown','id':MATCH},component_property='value'),
+    Input(component_id='slider', component_property='value') ,
+    Input(component_id={'type':'param-checklist','id':MATCH}, component_property='value'),
+    State(component_id={'type':'param-checklist','id':MATCH}, component_property='options')
+)
+def update_param_chart(experiment,group,i,params,options):
     fig = go.Figure()
-    t = t_list[i]
+    df_exp = df_dict[experiment]
+    t = t_list(df_exp)[i]
     colors = fig.layout['template']['layout']['colorway']
-    df_pf = df[df.apply(lambda x:
-        str(x['experiment'])==experiment and x['is_ea_point']==False and x['is_coea_point']==False and x['fevals']==t,
+    df_pf = df_exp[df_exp.apply(lambda x:
+        str(x['experiment'])==experiment and x['group']==group and x['f_evals']==t,
         axis=1)]
-    def get_individual (row):
-        s = row[column_string]
-        for c in list(' []|'):
-            s=s.replace(c,'')
-        return s.split(';')
-    individuals = [get_individual(row) for _,row in df_pf.iterrows()]
-    for j in params:
-        fig.add_trace(go.Scatter(
-            x=list(range(len(individuals))),y=[float(pred[j]) for pred in individuals],
-            mode='lines+markers',marker_color=colors[j%len(colors)]
+    for j,opt in enumerate(options):
+        if opt['value'] in params:
+            fig.add_trace(go.Scatter(
+                x=list(range(df_pf.shape[0])),y=df_pf[opt['value']],
+                mode='lines+markers',marker_color=colors[j%len(colors)]
         ))
     return fig
 
 @callback(
-    Output(component_id='pred-param-chart',component_property='figure'),
-    Input(component_id='dropdown',component_property='value'),
-    Input(component_id='slider', component_property='value') ,
-    Input(component_id='pred-param-checklist', component_property='value')
-)
-def update_pred_param_chart(experiment,i,params):
-    return update_param_chart(experiment,i,params,'pred')
-
-@callback(
-    Output(component_id='prey-param-chart',component_property='figure'),
-    Input(component_id='dropdown',component_property='value'),
-    Input(component_id='slider', component_property='value') ,
-    Input(component_id='prey-param-checklist', component_property='value')
-)
-def update_pred_param_chart(experiment,i,params):
-    return update_param_chart(experiment,i,params,'prey')
-
-@callback(
     Output(component_id='file-viewer-display',component_property='children') ,
-    Input(component_id='dropdown',component_property='value') ,
+    Input(component_id='experiment-dropdown',component_property='value') ,
     Input(component_id='file-viewer-select',component_property='value')
 )
 def view_file(experiment,filename):

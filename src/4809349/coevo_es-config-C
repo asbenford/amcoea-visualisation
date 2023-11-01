@@ -1,0 +1,179 @@
+controller_domain_specification =
+{[
+  {battery_thresh,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {vehicle_thresh,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {alpha_ttt ,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ttft,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ttff,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_tft ,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_tfft,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_tfff,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ftt ,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ftft,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ftff,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_fft ,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ffft,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {alpha_ffff,1,FLOAT,-1.0,1.0,Interval(10)} ;
+  {beta_ttft,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_ttff,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_tfft,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_tfff,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_ftft,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_ftff,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_ffft,1,FLOAT,0.0,1.0,Interval(10)} ;
+  {beta_ffff,1,FLOAT,0.0,1.0,Interval(10)}
+]} ;
+
+controller_dt_strings =
+{[
+  {START , IF , HH1.flow + PV1.flow < 0 , t, f } ;
+  
+  {t , IF , B1.charge < battery_thresh * B1.capacity , tt, tf } ;
+  {f , IF , B1.charge < battery_thresh * B1.capacity , ft, ff } ;
+  
+  {tt , IF , IsAbsent:EV1 , ttt1 , ttf } ;
+  {tf , IF , IsAbsent:EV1 , tft1 , tff } ;
+  {ft , IF , IsAbsent:EV1 , ftt1 , ftf } ;
+  {ff , IF , IsAbsent:EV1 , ttt1 , ttf } ;
+  
+  {ttf , IF , EV1.charge < vehicle_thresh * EV1.capacity , ttft1 , ttff1 } ;
+  {tff , IF , EV1.charge < vehicle_thresh * EV1.capacity , tfft1 , tfff1 } ;
+  {ftf , IF , EV1.charge < vehicle_thresh * EV1.capacity , ftft1 , ftff1 } ;
+  {fff , IF , EV1.charge < vehicle_thresh * EV1.capacity , ffft1 , ffff1 } ;
+  
+  {ttt1  , SET , B1.flow = alpha_ttt  * B1.max_in , END } ;
+  {ttft1 , SET , B1.flow = alpha_ttft * B1.max_in ,ttft2 } ;
+  {ttft2 , SET , EV1.flow = beta_ttft * EV1.max_in , END } ;
+  {ttff1 , SET , B1.flow = alpha_ttff * B1.max_in , ttff2 } ;
+  {ttff2 , SET , EV1.flow = beta_ttff * EV1.max_in , END } ;
+  
+  {tft1  , SET , B1.flow = alpha_tft  * B1.max_in , END } ;
+  {tfft1 , SET , B1.flow = alpha_tfft * B1.max_in ,tfft2 } ;
+  {tfft2 , SET , EV1.flow = beta_tfft * EV1.max_in , END } ;
+  {tfff1 , SET , B1.flow = alpha_tfff * B1.max_in , tfff2 } ;
+  {tfff2 , SET , EV1.flow = beta_tfff * EV1.max_in , END } ;
+  
+  {ftt1  , SET , B1.flow = alpha_ftt  * B1.max_in , END } ;
+  {ftft1 , SET , B1.flow = alpha_ftft * B1.max_in ,ftft2 } ;
+  {ftft2 , SET , EV1.flow = beta_ftft * EV1.max_in , END } ;
+  {ftff1 , SET , B1.flow = alpha_ftff * B1.max_in , ftff2 } ;
+  {ftff2 , SET , EV1.flow = beta_ftff * EV1.max_in , END } ;
+  
+  {fft1  , SET , B1.flow = alpha_fft  * B1.max_in , END } ;
+  {ffft1 , SET , B1.flow = alpha_ffft * B1.max_in ,ffft2 } ;
+  {ffft2 , SET , EV1.flow = beta_ffft * EV1.max_in , END } ;
+  {ffff1 , SET , B1.flow = alpha_ffff * B1.max_in , ffff2 } ;
+  {ffff2 , SET , EV1.flow = beta_ffff * EV1.max_in , END } ;
+  {END}
+]} ;
+
+scenario_domain_specification =
+{[
+  {PV_I,1,INDEX,2012-2013-aus-solar-normalised} ;
+  {mon_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {tue_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {wed_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {thu_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {fri_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {sat_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {sun_trip_start,1,FLOAT,7,21,Interval(5)} ;
+  {mon_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {tue_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {wed_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {thu_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {fri_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {sat_trip_length,1,FLOAT,1,5,Interval(5)} ;
+  {sun_trip_length,1,FLOAT,1,5,Interval(5)}
+]} ;
+
+scenario_dt_strings = 
+{[
+  {START, SETFLOWSPROPORTIONALLY , PV1 , 2012-2013-aus-solar-normalised , PV_I , 3. , 1 } ;
+  {1, SETFLOWS , HH1, 2012-2013-aus-household-normalised , PV_I , mon } ;
+  {mon, REGULARTRIP , EV1, (0*24) + mon_trip_start , 7*24 , mon_trip_length , 30. , tue } ;
+  {tue, REGULARTRIP , EV1, (1*24) + tue_trip_start , 7*24 , tue_trip_length , 30. , wed } ;
+  {wed, REGULARTRIP , EV1, (2*24) + wed_trip_start , 7*24 , wed_trip_length , 30. , thu } ;
+  {thu, REGULARTRIP , EV1, (3*24) + thu_trip_start , 7*24 , thu_trip_length , 30. , fri } ;
+  {fri, REGULARTRIP , EV1, (4*24) + fri_trip_start , 7*24 , fri_trip_length , 30. , sat } ;
+  {sat, REGULARTRIP , EV1, (5*24) + sat_trip_start , 7*24 , sat_trip_length , 30. , sun } ;
+  {sun, REGULARTRIP , EV1, (6*24) + sun_trip_start , 7*24 , sun_trip_length , 30. , END } ;
+  {END}
+]};
+ 
+default_components = {[
+  {
+    name = {EV1};
+    is_controllable = {true};
+    is_consumer = {true};
+    battery = {Some
+      {
+        capacity = {35.5};
+        max_in = {6.6};
+        max_out = {0.}
+      }};
+    cost_in = {0.};
+    cost_out = {0.};
+  };
+  {
+    name = {PV1};
+    is_controllable = {false};
+    is_consumer = {false};
+    battery = {None};
+    cost_in = {0.};
+    cost_out = {0.};
+  };
+  {
+    name = {B1};
+    is_controllable = {false};
+    is_consumer = {false};
+    battery = {Some
+      {
+        capacity = {7.5};
+        max_in = {3.};
+        max_out = {3.};
+      }};
+    cost_in = {0.};
+    cost_out = {0.};
+  } ;
+  {
+    name = {HH1};
+    is_controllable = {false};
+    is_consumer = {true};
+    battery = {None};
+    cost_in = {0.};
+    cost_out = {0.};
+  }
+]} ;
+
+default_grid = {
+  name = {G} ;
+  is_controllable = {false} ;
+  is_consumer = {false} ;
+  battery = {None} ;
+  cost_in = {0.} ;
+  cost_out = {0.1986} ;
+};
+
+alpha_specification = {[
+  {({0.25},{0.0})} ;
+  {({0.75},{1.0})}
+]} ;
+
+payoff_specification = {
+  monetary_cost = {
+    weight = {100.} ;
+    desirability_point_1 = {({0.0},{0.1})} ;
+    desirability_point_2 = {({0.1},{0.9})} ;
+  } ;
+  customer_satisfaction = {
+    weight = {1.} ;
+    desirability_point_1 = {({0.1},{0.1})} ;
+    desirability_point_2 = {({0.9},{0.9})} ;
+  } ;
+  monetary_cost_per_kwh = {
+    weight = {1.} ;
+    desirability_point_1 = {({0.2},{0.1})} ;
+    desirability_point_2 = {({0.0},{0.9})} ;
+  } ;
+  aggregation_method = {minimum} ;
+} ;
